@@ -147,6 +147,16 @@ app.get("/health", async (req, res) => {
 // TODO : Get specific delivery
 // route : /deliveries/:id
 
+// TODO : Driver accepts delivery
+// route : /deliveries/:id/assign
+// Publish event
+// Update main order status
+
+// tODO : Update delivery status ('PICKED_UP', 'DELIVERED')
+// route : /deliveries/:id/status'
+// Publish event
+// Update main order status
+
 process.on("SIGTERM", async () => {
   await consumer.disconnect();
   await producer.disconnect();
