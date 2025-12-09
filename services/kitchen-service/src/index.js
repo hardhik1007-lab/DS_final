@@ -101,7 +101,103 @@ app.get("/health", async (req, res) => {
 });
 
 // Get Pending orders for a restaurant
+app.get("/kitchen/orders/:restaurantId", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM kitchen_orders 
+       WHERE restaurant_id = $1 AND status != 'COMPLETED'
+       ORDER BY received_at DESC`,
+      [req.params.restaurantId]
+    );
 
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch orders" });
+  }
+});
 // Get all pending orders trial
+app.get("/kitchen/orders", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM kitchen_orders 
+       WHERE status != 'COMPLETED'
+       ORDER BY received_at DESC`
+    );
 
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch orders" });
+  }
+});
 //update order status
+app.patch("/kitchen/orders/:id/status", async (req, res) => {
+  try {
+    const { status } = req.body; // 'ACCEPTED', 'COOKING', 'READY', 'COMPLETED'
+
+    if (!["ACCEPTED", "COOKING", "READY", "COMPLETED"].includes(status)) {
+      return res.status(400).json({ error: "Invalid status" });
+    }
+
+    const result = await pool.query(
+      `UPDATE kitchen_orders 
+       SET status = $1, updated_at = NOW()
+       WHERE id = $2 
+       RETURNING *`,
+      [status, req.params.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    const order = result.rows[0];
+
+    // Publish status update event
+    await producer.send({
+      topic: "order-events",
+      messages: [
+        {
+          key: order.order_id.toString(),
+          value: JSON.stringify({
+            eventType: "ORDER_STATUS_UPDATED",
+            orderId: order.order_id,
+            kitchenOrderId: order.id,
+            status: status,
+            restaurantId: order.restaurant_id,
+            timestamp: new Date().toISOString(),
+          }),
+        },
+      ],
+    });
+
+    console.log(
+      `Status update published: Order ${order.order_id} is now ${status}`
+    );
+
+    // update the main orders table
+    await pool.query(
+      `UPDATE orders SET status = $1, updated_at = NOW() WHERE id = $2`,
+      [status, order.order_id]
+    );
+
+    res.json({
+      message: "Order status updated",
+      order: order,
+    });
+  } catch (error) {
+    console.error("Failed to update status:", error);
+    res.status(500).json({ error: "Failed to update order status" });
+  }
+});
+
+process.on("SIGTERM", async () => {
+  await consumer.disconnect();
+  await producer.disconnect();
+  await pool.end();
+  process.exit(0);
+});
+
+const PORT = process.env.PORT || 3004;
+app.listen(PORT, () => {
+  console.log(`Kitchen Service running on port ${PORT}`);
+});
