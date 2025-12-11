@@ -1,0 +1,86 @@
+<html>
+  <head>
+    <title>FoodFlux Notifications Test</title>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Real time Notifications</h1>
+
+      <div id="status" class="status disconnected">Disconnected</div>
+
+      <div style="margin: 20px 0">
+        <input type="number" id="userId" placeholder="User ID" value="1" />
+        <button onclick="registerUser()">Register as User</button>
+
+        <br />
+
+        <input type="number" id="orderId" placeholder="Order ID" value="2" />
+        <button onclick="subscribeToOrder()">Subscribe to Order</button>
+      </div>
+
+      <h3>Notifications:</h3>
+      <div id="updates"></div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script>
+      const socket = io("http://localhost:3006");
+      const statusDiv = document.getElementById("status");
+      const updatesDiv = document.getElementById("updates");
+
+      socket.on("connect", () => {
+        console.log("Connected to notification service");
+        statusDiv.className = "status connected";
+        statusDiv.innerHTML = "Connected";
+      });
+
+      socket.on("disconnect", () => {
+        console.log("Disconnected");
+        statusDiv.className = "status disconnected";
+        statusDiv.innerHTML = "Disconnected";
+      });
+
+      socket.on("registered", (data) => {
+        addUpdate("success", `Registered as User ${data.userId}`);
+      });
+
+      socket.on("subscribed", (data) => {
+        addUpdate("success", `Subscribed to Order ${data.orderId}`);
+      });
+
+      socket.on("order-update", (notification) => {
+        console.log("Order update:", notification);
+        addUpdate(
+          "order",
+          `
+        <span class="event-type">${notification.type}</span><br>
+        Order ID: ${notification.orderId}<br>
+        Status: ${notification.data.status || "N/A"}<br>
+        Time: ${new Date(notification.timestamp).toLocaleTimeString()}
+      `
+        );
+      });
+
+      socket.on("global-update", (data) => {
+        console.log("Global update:", data);
+      });
+
+      function registerUser() {
+        const userId = parseInt(document.getElementById("userId").value);
+        socket.emit("register", userId);
+      }
+
+      function subscribeToOrder() {
+        const orderId = parseInt(document.getElementById("orderId").value);
+        socket.emit("subscribe-order", orderId);
+      }
+
+      function addUpdate(type, message) {
+        const update = document.createElement("div");
+        update.className = "update";
+        update.innerHTML = message;
+        updatesDiv.insertBefore(update, updatesDiv.firstChild);
+      }
+    </script>
+  </body>
+</html>

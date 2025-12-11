@@ -191,6 +191,9 @@ app.post("/deliveries/:id/assign", async (req, res) => {
   try {
     const { driverId, driverName } = req.body;
 
+    if (!driverId || !driverName) {
+      return res.status(400).json({ error: "Driver ID and name required" });
+    }
     const result = await pool.query(
       `UPDATE deliveries 
        SET driver_id = $1, driver_name = $2, status = 'ASSIGNED', assigned_at = NOW()
@@ -246,8 +249,11 @@ app.post("/deliveries/:id/assign", async (req, res) => {
 // Update delivery status
 app.patch("/deliveries/:id/status", async (req, res) => {
   try {
-    const { status } = req.body;
+    const { status } = req.body; // 'PICKED_UP OR DELIVERED'
 
+    if (!["PICKED_UP", "DELIVERED"].includes(status)) {
+      return res.status(400).json({ error: "Invalid status" });
+    }
     const updateField =
       status === "PICKED_UP" ? "picked_up_at" : "delivered_at";
 
@@ -258,6 +264,10 @@ app.patch("/deliveries/:id/status", async (req, res) => {
        RETURNING *`,
       [status, req.params.id]
     );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Delivery not found" });
+    }
 
     const delivery = result.rows[0];
 
@@ -297,7 +307,6 @@ app.patch("/deliveries/:id/status", async (req, res) => {
     res.status(500).json({ error: "Failed to update delivery status" });
   }
 });
-
 
 process.on("SIGTERM", async () => {
   await consumer.disconnect();
